@@ -1,0 +1,8 @@
+modoptions.title=Настройки модов
+modoptions.mods=МОДЫ
+modoptions.search=Поиск настроек...
+modoptions.no_results=Настройки не найдены
+modoptions.open_native_config=Открыть настройки
+modoptions.native_config=Нативные настройки
+modoptions.no_config=Нет настроек
+modoptions.native_config_hint=Этот мод использует собственный экран настроек.

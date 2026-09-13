@@ -1,0 +1,8 @@
+modoptions.title=Mod Options
+modoptions.mods=MODS
+modoptions.search=Search settings...
+modoptions.no_results=No settings match your search
+modoptions.open_native_config=Open Config
+modoptions.native_config=Native config
+modoptions.no_config=No config
+modoptions.native_config_hint=This mod uses its own configuration screen.

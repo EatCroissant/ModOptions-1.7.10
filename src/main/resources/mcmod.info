@@ -1,0 +1,14 @@
+[
+{
+  "modid": "modoptions",
+  "name": "Mod Options",
+  "description": "Shared configuration UI library for Forge 1.7.10 mods.",
+  "version": "0.0.4",
+  "mcversion": "1.7.10",
+  "authorList": ["Ariamis"],
+  "credits": "",
+  "logoFile": "",
+  "url": "",
+  "useMetadata": false
+}
+]
