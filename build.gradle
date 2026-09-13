@@ -10,7 +10,7 @@ buildscript {
 
 apply plugin: 'forge'
 
-version = "0.0.4"
+version = "0.0.5"
 group = "com.garden.modoptions"
 archivesBaseName = "ModOptions-1.7.10"
 

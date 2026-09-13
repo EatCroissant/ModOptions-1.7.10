@@ -30,6 +30,10 @@ jobs:
       - name: Build
         run: ./gradlew build --no-daemon
 
+      - name: Verify scroll and option behavior
+        shell: pwsh
+        run: ./scripts/verify_scroll_ui.ps1
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:

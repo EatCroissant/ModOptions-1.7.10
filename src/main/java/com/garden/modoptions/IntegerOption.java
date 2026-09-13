@@ -22,11 +22,18 @@ public final class IntegerOption extends ModOption implements NumericOption {
     @Override public double numericValue() { return value; }
     @Override public double minimum() { return min; }
     @Override public double maximum() { return max; }
-    @Override public void setNumericValue(double value) { set((int) Math.round(value)); }
+    @Override
+    public void setNumericValue(double value) {
+        long steps = Math.round((value - min) / step);
+        long snapped = (long) min + steps * (long) step;
+        set((int) Math.max(min, Math.min((long) max, snapped)));
+    }
 
     public void set(int value) {
-        this.value = Math.max(min, Math.min(max, value));
-        if (onChanged != null) onChanged.run();
+        int next = Math.max(min, Math.min(max, value));
+        if (this.value == next) return;
+        this.value = next;
+        OptionChangeCallback.run(getKey(), onChanged);
     }
 
     @Override

@@ -21,7 +21,8 @@ public final class EnumOption<T> extends ModOption {
 
     @Override
     public void cycle() {
+        if (values.length == 1) return;
         index = (index + 1) % values.length;
-        if (onChanged != null) onChanged.run();
+        OptionChangeCallback.run(getKey(), onChanged);
     }
 }

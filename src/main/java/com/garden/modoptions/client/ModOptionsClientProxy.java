@@ -6,6 +6,7 @@ import net.minecraftforge.common.MinecraftForge;
 public final class ModOptionsClientProxy extends ModOptionsCommonProxy {
     @Override
     public void init() {
+        ModOptionsThemes.register();
         MinecraftForge.EVENT_BUS.register(new ModOptionsClientEvents());
     }
 }

@@ -30,13 +30,11 @@ import org.lwjgl.opengl.GL11;
  */
 public final class ModOptionsGui extends GuiScreen {
 
-  private static final int HEADER_SCROLL_SPACE = 130;
   private static final int DONE = 29000;
   private static final int MOD_BASE = 1000;
   private static final int OPTION_BASE = 2000;
   private static final int GROUP_BASE = 30000;
   private static final int OPEN_NATIVE_CONFIG = 29100;
-  private static final int THEME_SETTINGS = 29200;
 
   private static final int COLUMN_GAP = 5;
   private static final int MIN_CARD_WIDTH = 210;
@@ -154,7 +152,8 @@ public final class ModOptionsGui extends GuiScreen {
     filteredOptionCount = countOptions(visibleGroups);
 
     int columns = optionColumns(metrics.contentWidth);
-    optionContentHeight = HEADER_SCROLL_SPACE + measureContent(visibleGroups, columns, searchText.length() > 0);
+    optionContentHeight = metrics.viewportY - metrics.headerBottom
+        + measureContent(visibleGroups, columns, searchText.length() > 0);
     int maxScroll = globalContentMaxScroll(metrics);
     optionScroll = clamp(optionScroll, 0, maxScroll);
 
@@ -185,8 +184,6 @@ public final class ModOptionsGui extends GuiScreen {
         I18n.format("gui.done")
       )
     );
-    buttonList.add(new TexturedButton(THEME_SETTINGS,
-      metrics.searchX - 24, metrics.panelY + 7, 20, 20, "\u2699"));
   }
 
   private void buildNavigation(LayoutMetrics metrics) {
@@ -223,6 +220,7 @@ public final class ModOptionsGui extends GuiScreen {
   }
 
   private void buildOptionControls(LayoutMetrics metrics, List<DisplayGroup> groups, int columns) {
+    ScrollViewport viewport = optionViewport(metrics);
     int cardWidth = (metrics.contentWidth - (columns - 1) * COLUMN_GAP) / columns;
     int cursor = 0;
     int groupIndex = 0;
@@ -233,7 +231,7 @@ public final class ModOptionsGui extends GuiScreen {
       boolean collapsed = !searching && isGroupCollapsed(group);
       if (showHeaders) {
         int screenY = metrics.viewportY + cursor - optionScroll;
-        if (intersects(screenY, groupHeaderHeight(), metrics.headerBottom, metrics.footerY)) {
+        if (viewport.intersects(screenY, groupHeaderHeight())) {
           int id = GROUP_BASE + groupIndex;
           groupButtonIds.put(id, group.id);
           buttonList.add(
@@ -260,7 +258,7 @@ public final class ModOptionsGui extends GuiScreen {
           int x = metrics.contentX + column * (cardWidth + COLUMN_GAP);
           int virtualY = cursor + row * (cardHeight() + cardGap());
           int y = metrics.viewportY + virtualY - optionScroll;
-          if (!intersects(y, cardHeight(), metrics.headerBottom, metrics.footerY)) continue;
+          if (!viewport.intersects(y, cardHeight())) continue;
           int sourceIndex = selectedOptions.indexOf(option);
           if (sourceIndex < 0) continue;
           GuiButton button =
@@ -291,10 +289,6 @@ public final class ModOptionsGui extends GuiScreen {
     if (!button.enabled) return;
     if (button.id == DONE) {
       closeToParent();
-      return;
-    }
-    if (button.id == THEME_SETTINGS) {
-      mc.displayGuiScreen(new ThemeOptionsGui(this));
       return;
     }
     if (button.id == OPEN_NATIVE_CONFIG) {
@@ -350,14 +344,13 @@ public final class ModOptionsGui extends GuiScreen {
     int wheel = Mouse.getDWheel();
     if (wheel == 0) return;
     LayoutMetrics metrics = metrics();
+    ScrollViewport optionViewport = optionViewport(metrics);
+    ScrollViewport navViewport = navigationViewport(metrics);
     int mouseX = (Mouse.getEventX() * width) / mc.displayWidth;
     int mouseY = height - (Mouse.getEventY() * height) / mc.displayHeight - 1;
 
     if (
-      mouseX >= metrics.sidebarX &&
-      mouseX < metrics.sidebarX + metrics.sidebarWidth &&
-      mouseY >= metrics.navY &&
-      mouseY < metrics.navY + metrics.navHeight
+      navViewport.contains(mouseX, mouseY)
     ) {
       int visibleRows = visibleNavRows(metrics);
       int maxScroll = Math.max(0, modIds.size() - visibleRows);
@@ -367,10 +360,7 @@ public final class ModOptionsGui extends GuiScreen {
     }
 
     if (
-      mouseX >= metrics.contentX &&
-      mouseX < metrics.contentX + metrics.contentWidth &&
-      mouseY >= metrics.headerBottom &&
-      mouseY < metrics.footerY
+      optionViewport.contains(mouseX, mouseY)
     ) {
       int maxScroll = globalContentMaxScroll(metrics);
       int amount = ModOptionsStyle.compactLayout ? 18 : 24;
@@ -383,8 +373,7 @@ public final class ModOptionsGui extends GuiScreen {
   }
 
   private int globalContentMaxScroll(LayoutMetrics metrics) {
-    int visibleHeight = Math.max(24, metrics.footerY - metrics.headerBottom - 8);
-    return Math.max(0, optionContentHeight - visibleHeight);
+    return optionViewport(metrics).maxScroll(optionContentHeight);
   }
 
   @Override
@@ -420,15 +409,8 @@ public final class ModOptionsGui extends GuiScreen {
     // mask controls whose visible pixels do not contain this click so a
     // partially clipped row cannot be activated through the header/footer.
     List<GuiButton> masked = new ArrayList<GuiButton>();
-    boolean optionPoint = pointIn(
-      mouseX,
-      mouseY,
-      metrics.contentX,
-      metrics.viewportY,
-      metrics.contentWidth,
-      metrics.viewportHeight
-    );
-    boolean navPoint = pointIn(mouseX, mouseY, metrics.navX, metrics.navY, metrics.navWidth, metrics.navHeight);
+    boolean optionPoint = optionViewport(metrics).contains(mouseX, mouseY);
+    boolean navPoint = navigationViewport(metrics).contains(mouseX, mouseY);
     for (Object object : buttonList) {
       if (!(object instanceof GuiButton)) continue;
       GuiButton button = (GuiButton) object;
@@ -557,60 +539,31 @@ public final class ModOptionsGui extends GuiScreen {
     if (selectedEntry != null) {
       int contentOffset = optionScroll;
       ResourceLocation preview = ForgeModCatalog.loadPreview(mc, selectedEntry);
-      int iconAreaWidth = 8;
-      if (preview != null) {
-        int[] size = ForgeModCatalog.previewSize(preview);
-        if (size != null) {
-          float maxHeight = 64.0f;
-          float scale = maxHeight / Math.max(1, size[1]);
-          int renderedWidth = Math.max(1, Math.round(size[0] * scale));
-          iconAreaWidth = Math.min(metrics.contentWidth / 2 - 8, renderedWidth + 8);
-        }
-      }
-      int headerTextX = preview == null ? metrics.contentX + 8 : metrics.contentX + iconAreaWidth + 16;
-      drawModPreview(selectedEntry, metrics, iconAreaWidth);
+      boolean hasPreview = preview != null;
+      int iconAreaWidth = previewAreaWidth(preview, metrics.contentWidth);
+      int headerTextX = hasPreview
+        ? metrics.contentX + iconAreaWidth + 12
+        : metrics.contentX + 4;
       int headerTextWidth = Math.max(40, metrics.panelX + metrics.panelWidth - headerTextX - 16);
       String modName = fontRendererObj.trimStringToWidth(selectedEntry.name, headerTextWidth);
-      int titleY = metrics.headerBottom + 30 - contentOffset;
-      if (titleY >= metrics.panelY && titleY < metrics.footerY - 8) {
-        drawString(fontRendererObj, modName, headerTextX, titleY, ModOptionsStyle.textColor);
+      List<String> metaLines = modMetadataLines(selectedEntry, metrics.contentWidth, iconAreaWidth);
+
+      ScrollViewport headerViewport = optionViewport(metrics);
+      enableScissor(headerViewport.x(), headerViewport.y(), headerViewport.width(), headerViewport.height());
+      drawModPreview(preview, metrics, iconAreaWidth);
+      int titleY = metrics.headerBottom + ModHeaderLayout.titleOffset(hasPreview) - contentOffset;
+      drawString(fontRendererObj, modName, headerTextX, titleY, ModOptionsStyle.textColor);
+      int metadataY = metrics.headerBottom + ModHeaderLayout.metadataOffset(hasPreview) - contentOffset;
+      for (int i = 0; i < metaLines.size() && i < ModHeaderLayout.MAX_METADATA_LINES; i++) {
+        drawString(
+          fontRendererObj,
+          metaLines.get(i),
+          headerTextX,
+          metadataY + i * 10,
+          ModOptionsStyle.mutedTextColor
+        );
       }
-      String meta = selectedEntry.description;
-      if (selectedEntry.authors.length() > 0) {
-        if (meta.length() > 0) meta += "  |  ";
-        meta += selectedEntry.authors;
-      }
-      if (selectedEntry.version.length() > 0) meta += "  " + selectedEntry.version;
-      if (meta.length() > 0) {
-        int descriptionX = metrics.contentX + iconAreaWidth + 16;
-        int rightWidth = metrics.panelX + metrics.panelWidth - descriptionX - 16;
-        List<String> rightLines =
-          rightWidth >= 40 ? fontRendererObj.listFormattedStringToWidth(meta, rightWidth) : new ArrayList<String>();
-        if (rightLines.size() == 1) {
-          int descriptionY = metrics.headerBottom + 58 - contentOffset;
-          if (descriptionY >= metrics.panelY && descriptionY < metrics.footerY) {
-            drawString(fontRendererObj, rightLines.get(0), descriptionX, descriptionY, ModOptionsStyle.mutedTextColor);
-          }
-        } else {
-          List<String> metaLines = fontRendererObj.listFormattedStringToWidth(
-            meta,
-            Math.max(40, metrics.contentWidth - 16)
-          );
-          int lineY = metrics.headerBottom + 92 - contentOffset;
-          for (int i = 0; i < metaLines.size() && i < 3; i++) {
-            int currentY = lineY + i * 10;
-            if (currentY >= metrics.panelY && currentY < metrics.footerY) {
-              drawString(
-                fontRendererObj,
-                metaLines.get(i),
-                metrics.contentX + 8,
-                currentY,
-                ModOptionsStyle.mutedTextColor
-              );
-            }
-          }
-        }
-      }
+      disableScissor();
     }
 
     if (selectedEntry != null && selectedEntry.libraryConfig) {
@@ -630,7 +583,7 @@ public final class ModOptionsGui extends GuiScreen {
         fontRendererObj,
         ModOptionsText.ui("modoptions.native_config_hint", "This mod uses its own configuration screen."),
         metrics.contentX,
-        metrics.viewportY + 42,
+        metrics.viewportY + 12,
         ModOptionsStyle.mutedTextColor
       );
     }
@@ -640,9 +593,10 @@ public final class ModOptionsGui extends GuiScreen {
     // the toolbar or footer.
     drawClippedButtons(mouseX, mouseY, metrics);
 
+    ScrollViewport optionViewport = optionViewport(metrics);
     int optionMax = globalContentMaxScroll(metrics);
-    int fullOptionTrackY = metrics.headerBottom + 8;
-    int fullOptionTrackHeight = Math.max(24, metrics.footerY - fullOptionTrackY - 8);
+    int fullOptionTrackY = optionViewport.trackY();
+    int fullOptionTrackHeight = optionViewport.trackHeight();
     if (optionMax > 0) {
       boolean over = pointIn(
         mouseX,
@@ -660,7 +614,7 @@ public final class ModOptionsGui extends GuiScreen {
         fullOptionTrackHeight,
         optionScroll,
         optionContentHeight,
-        Math.max(24, metrics.footerY - metrics.headerBottom - 8),
+        optionViewport.height(),
         over,
         draggingOptionScrollbar
       );
@@ -693,11 +647,41 @@ public final class ModOptionsGui extends GuiScreen {
     drawContextHelp(mouseX, mouseY, metrics);
   }
 
-  private void drawModPreview(ForgeModCatalog.Entry entry, LayoutMetrics metrics, int iconAreaWidth) {
-    if (entry.previewTexture == null || entry.previewTexture.length() == 0) return;
+  private int previewAreaWidth(ResourceLocation preview, int contentWidth) {
+    if (preview == null) return 0;
+    int[] size = ForgeModCatalog.previewSize(preview);
+    if (size == null) return Math.min(contentWidth / 3, 72);
+    float scale = 64.0f / Math.max(1, size[1]);
+    int renderedWidth = Math.max(1, Math.round(size[0] * scale));
+    return Math.min(Math.max(8, contentWidth / 2 - 8), renderedWidth + 8);
+  }
+
+  private String modMetadata(ForgeModCatalog.Entry entry) {
+    StringBuilder text = new StringBuilder();
+    if (entry.description.length() > 0) text.append(entry.description);
+    if (entry.authors.length() > 0) {
+      if (text.length() > 0) text.append("  |  ");
+      text.append(entry.authors);
+    }
+    if (entry.version.length() > 0) {
+      if (text.length() > 0) text.append("  ");
+      text.append(entry.version);
+    }
+    return text.toString();
+  }
+
+  private List<String> modMetadataLines(ForgeModCatalog.Entry entry,
+          int contentWidth, int iconAreaWidth) {
+    String metadata = modMetadata(entry);
+    if (metadata.length() == 0) return new ArrayList<String>();
+    int gap = iconAreaWidth > 0 ? 24 : 8;
+    int width = Math.max(40, contentWidth - iconAreaWidth - gap);
+    return fontRendererObj.listFormattedStringToWidth(metadata, width);
+  }
+
+  private void drawModPreview(ResourceLocation resource, LayoutMetrics metrics, int iconAreaWidth) {
+    if (resource == null) return;
     try {
-      ResourceLocation resource = ForgeModCatalog.loadPreview(mc, entry);
-      if (resource == null) return;
       GL11.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
       mc.getTextureManager().bindTexture(resource);
       Tessellator tessellator = Tessellator.instance;
@@ -711,8 +695,9 @@ public final class ModOptionsGui extends GuiScreen {
       int iconWidth = Math.max(1, Math.round(sourceWidth * scale));
       int iconHeight = Math.max(1, Math.round(sourceHeight * scale));
       int left = iconAreaLeft + Math.max(0, (iconAreaWidth - iconWidth) / 2);
-      int top = metrics.headerBottom + 22 - optionScroll;
-      if (top < metrics.panelY || top + iconHeight <= metrics.panelY || top >= metrics.footerY) return;
+      int top = metrics.headerBottom + 10 - optionScroll;
+      ScrollViewport viewport = optionViewport(metrics);
+      if (!viewport.intersects(top, iconHeight)) return;
       tessellator.startDrawingQuads();
       tessellator.addVertexWithUV(left, top + iconHeight, zLevel, 0, 1);
       tessellator.addVertexWithUV(left + iconWidth, top + iconHeight, zLevel, 1, 1);
@@ -772,7 +757,8 @@ public final class ModOptionsGui extends GuiScreen {
   }
 
   private void drawClippedButtons(int mouseX, int mouseY, LayoutMetrics metrics) {
-    enableScissor(metrics.navX, metrics.navY, metrics.navWidth, metrics.navHeight);
+    ScrollViewport navViewport = navigationViewport(metrics);
+    enableScissor(navViewport.x(), navViewport.y(), navViewport.width(), navViewport.height());
     for (Object object : buttonList) {
       if (!(object instanceof GuiButton)) continue;
       GuiButton button = (GuiButton) object;
@@ -783,7 +769,8 @@ public final class ModOptionsGui extends GuiScreen {
     drawModAvailabilityDivider(metrics);
     disableScissor();
 
-    enableScissor(metrics.contentX, metrics.headerBottom, metrics.contentWidth, metrics.footerY - metrics.headerBottom);
+    ScrollViewport optionViewport = optionViewport(metrics);
+    enableScissor(optionViewport.x(), optionViewport.y(), optionViewport.width(), optionViewport.height());
     for (Object object : buttonList) {
       if (!(object instanceof GuiButton)) continue;
       GuiButton button = (GuiButton) object;
@@ -850,30 +837,31 @@ public final class ModOptionsGui extends GuiScreen {
   }
 
   private boolean beginScrollbarDrag(int mouseX, int mouseY, LayoutMetrics metrics) {
+    ScrollViewport optionViewport = optionViewport(metrics);
     int optionMax = globalContentMaxScroll(metrics);
     if (
       optionMax > 0 &&
       pointIn(
         mouseX,
         mouseY,
-        optionScrollbarX(metrics) - 3,
-        metrics.viewportY,
-        OPTION_SCROLLBAR_WIDTH + 6,
-        metrics.viewportHeight
+        optionScrollbarX(metrics) - 2,
+        optionViewport.trackY(),
+        OPTION_SCROLLBAR_WIDTH + 4,
+        optionViewport.trackHeight()
       )
     ) {
       int thumbHeight = ModOptionsTextures.scrollbarThumbHeight(
-        metrics.viewportHeight,
+        optionViewport.trackHeight(),
         optionContentHeight,
-        metrics.viewportHeight
+        optionViewport.height()
       );
       int thumbY = ModOptionsTextures.scrollbarThumbY(
-        metrics.viewportY,
-        metrics.viewportHeight,
+        optionViewport.trackY(),
+        optionViewport.trackHeight(),
         thumbHeight,
         optionScroll,
         optionContentHeight,
-        metrics.viewportHeight
+        optionViewport.height()
       );
       if (mouseY >= thumbY && mouseY < thumbY + thumbHeight) {
         scrollbarDragOffset = mouseY - thumbY;
@@ -881,8 +869,8 @@ public final class ModOptionsGui extends GuiScreen {
         scrollbarDragOffset = thumbHeight / 2;
         optionScroll = optionScrollFromThumb(
           mouseY - scrollbarDragOffset,
-          metrics.viewportY,
-          metrics.viewportHeight,
+          optionViewport.trackY(),
+          optionViewport.trackHeight(),
           thumbHeight,
           optionMax
         );
@@ -930,16 +918,17 @@ public final class ModOptionsGui extends GuiScreen {
 
   private void updateScrollbarDrag(int mouseY, LayoutMetrics metrics) {
     if (draggingOptionScrollbar) {
+      ScrollViewport optionViewport = optionViewport(metrics);
       int max = globalContentMaxScroll(metrics);
       int thumbHeight = ModOptionsTextures.scrollbarThumbHeight(
-        metrics.viewportHeight,
+        optionViewport.trackHeight(),
         optionContentHeight,
-        metrics.viewportHeight
+        optionViewport.height()
       );
       int next = optionScrollFromThumb(
         mouseY - scrollbarDragOffset,
-        metrics.viewportY,
-        metrics.viewportHeight,
+        optionViewport.trackY(),
+        optionViewport.trackHeight(),
         thumbHeight,
         max
       );
@@ -970,11 +959,27 @@ public final class ModOptionsGui extends GuiScreen {
   }
 
   private int optionScrollbarX(LayoutMetrics metrics) {
-    return metrics.contentX + metrics.contentWidth + 6;
+    return metrics.panelX + metrics.panelWidth - OPTION_SCROLLBAR_WIDTH - 2;
   }
 
   private int navScrollbarX(LayoutMetrics metrics) {
     return metrics.sidebarX + metrics.sidebarWidth - 7;
+  }
+
+  private ScrollViewport optionViewport(LayoutMetrics metrics) {
+    int y = metrics.headerBottom + 1;
+    return new ScrollViewport(
+      metrics.contentX,
+      y,
+      metrics.contentWidth,
+      Math.max(1, metrics.footerY - y),
+      7,
+      8
+    );
+  }
+
+  private ScrollViewport navigationViewport(LayoutMetrics metrics) {
+    return new ScrollViewport(metrics.navX, metrics.navY, metrics.navWidth, metrics.navHeight);
   }
 
   private static boolean pointIn(int mouseX, int mouseY, int x, int y, int width, int height) {
@@ -999,7 +1004,7 @@ public final class ModOptionsGui extends GuiScreen {
         button instanceof GroupHeaderButton;
       if (
         optionControl &&
-        !pointIn(mouseX, mouseY, metrics.contentX, metrics.viewportY, metrics.contentWidth, metrics.viewportHeight)
+        !optionViewport(metrics).contains(mouseX, mouseY)
       ) continue;
       if (button instanceof NumericSliderButton) {
         hovered = ((NumericSliderButton) button).getOption();
@@ -1263,6 +1268,9 @@ public final class ModOptionsGui extends GuiScreen {
     int sidebarWidth = clamp(panelWidth / 5, Math.min(100, panelWidth / 3), 168);
     int panelX = (width - panelWidth) / 2;
     int dividerX = panelX + sidebarWidth;
+    int contentX = dividerX + 12;
+    int contentRightPadding = 8;
+    int contentWidth = panelX + panelWidth - contentX - contentRightPadding;
 
     int contentUsableWidth = panelWidth - sidebarWidth - 1 - 24;
     int columns = optionColumns(contentUsableWidth);
@@ -1270,15 +1278,19 @@ public final class ModOptionsGui extends GuiScreen {
     int measured = measureContent(sizingGroups, columns, searchText.length() > 0);
 
     int headerHeight = 34;
-    // Reserve a separate metadata line below the search field.
-    int toolbarHeight = 130;
+    ForgeModCatalog.Entry selectedEntry = entryFor(selectedMod);
+    ResourceLocation preview = selectedEntry == null ? null : ForgeModCatalog.loadPreview(mc, selectedEntry);
+    int iconAreaWidth = previewAreaWidth(preview, contentWidth);
+    int metadataLines = selectedEntry == null
+      ? 0
+      : modMetadataLines(selectedEntry, contentWidth, iconAreaWidth).size();
+    int toolbarHeight = ModHeaderLayout.contentHeight(preview != null, metadataLines);
     int viewportBottomPadding = 6;
     int footerHeight = 26;
     int chromeHeight = headerHeight + toolbarHeight + viewportBottomPadding + footerHeight;
     int minimumNavRows = 4;
     int minimumNavigationHeight = minimumNavRows * (navRowHeight() + navRowGap());
     int minimumPanelHeight = chromeHeight + 18 + minimumNavigationHeight + 4;
-    ForgeModCatalog.Entry selectedEntry = entryFor(selectedMod);
     int desiredViewport = Math.max(
       selectedEntry != null && selectedEntry.forgeConfig && !selectedEntry.libraryConfig ? 74 : 60,
       measured
@@ -1301,9 +1313,6 @@ public final class ModOptionsGui extends GuiScreen {
     int navWidth = sidebarWidth - 14;
     int navHeight = Math.max(22, footerY - navY - 4);
 
-    int contentX = dividerX + 12;
-    int contentRightPadding = 8;
-    int contentWidth = panelX + panelWidth - contentX - contentRightPadding;
     int searchWidth = Math.min(contentWidth, clamp(contentWidth / 3, 122, 190));
     int searchHeight = 18;
     int searchX = contentX + contentWidth - searchWidth;
@@ -1369,10 +1378,6 @@ public final class ModOptionsGui extends GuiScreen {
 
   private int cardGap() {
     return ModOptionsStyle.compactLayout ? 4 : 6;
-  }
-
-  private static boolean intersects(int y, int height, int top, int bottom) {
-    return y + height > top && y < bottom;
   }
 
   private static int clamp(int value, int min, int max) {

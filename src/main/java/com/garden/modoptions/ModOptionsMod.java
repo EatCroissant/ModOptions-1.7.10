@@ -4,7 +4,7 @@ import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 
-@Mod(modid = ModOptionsMod.MODID, name = "Mod Options", version = "0.0.4",
+@Mod(modid = ModOptionsMod.MODID, name = "Mod Options", version = "0.0.5",
         acceptedMinecraftVersions = "[1.7.10]")
 public final class ModOptionsMod {
     public static final String MODID = "modoptions";

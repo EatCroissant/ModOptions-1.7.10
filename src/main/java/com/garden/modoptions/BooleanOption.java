@@ -14,8 +14,9 @@ public final class BooleanOption extends ModOption {
     public boolean get() { return value; }
 
     public void set(boolean value) {
+        if (this.value == value) return;
         this.value = value;
-        if (onChanged != null) onChanged.run();
+        OptionChangeCallback.run(getKey(), onChanged);
     }
 
     @Override

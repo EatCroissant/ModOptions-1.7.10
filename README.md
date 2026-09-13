@@ -36,13 +36,13 @@ On Linux or macOS:
 ./gradlew build
 ```
 
-The built JAR is written to `build/libs/ModOptions-1.7.10-0.0.4.jar`.
+The built JAR is written to `build/libs/ModOptions-1.7.10-0.0.5.jar`.
 
 For normal play, place that JAR in the instance's `mods` directory. For mod development, add the JAR to your workspace's `libs` directory and declare it as a local dependency:
 
 ```groovy
 dependencies {
-    compile files('libs/ModOptions-1.7.10-0.0.4.jar')
+    compile files('libs/ModOptions-1.7.10-0.0.5.jar')
 }
 ```
 
